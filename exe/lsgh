@@ -1,0 +1,87 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift(File.dirname(File.realpath(__FILE__)) + '/../lib')
+
+require 'lsgh'
+require 'github_api'
+require 'optparse'
+
+options = {
+  token: ENV['GITHUB_API_TOKEN']
+}
+
+OptionParser.new do |opts|
+  opts.banner = 'Usage: lsgh [options]...'
+
+  opts.on(
+    '-v',
+    '--version',
+    'Print version'
+  ) do
+    puts "lsgh version #{Lsgh::VERSION}"
+    exit
+  end
+
+  opts.on(
+    '-h',
+    '--help',
+    'Show this help text'
+  ) do
+    puts opts
+    exit
+  end
+
+  opts.on(
+    '-tToken',
+    '--token=github_token',
+    'Github access token, if not specified the environment variable GITHUB_API_TOKEN is used'
+  ) do |value|
+    options[:org] = value
+  end
+
+  opts.on(
+    '-oOrganisation',
+    '--org=organisation_name',
+    'github organisation name to list repositories for'
+  ) do |value|
+    options[:org] = value
+  end
+
+  opts.on(
+    '-uUser',
+    '--user=username',
+    'github user name to list repositories for'
+  ) do |value|
+    options[:user] = value
+  end
+
+  opts.on(
+    '-rRepository',
+    '--repo=Repository',
+    'list a specific repository pull requests for this user or org'
+  ) do |value|
+    options[:repo] = value
+  end
+end.parse!
+
+unless options.key?(:user) || options.key?(:org)
+  puts 'A user (-u) or organisation (-o) must be specified.'
+  exit(1)
+end
+
+token = options[:token]
+
+user = Lsgh::User.new(options[:user] || options[:org])
+client = Github.new(oauth_token: token, auto_pagination: true)
+
+if options.key?(:repo)
+  repository = client.repos.find(user: user.name, repo: options[:repo])
+  user.add Lsgh::Repository.new(repository, client)
+else
+  key = options.key?(:org) ? :org : :user
+  client.repos.list(key => user.name).each do |repo|
+    user.add Lsgh::Repository.new(repo, client)
+  end
+end
+
+puts user.to_paths
